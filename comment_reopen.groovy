@@ -152,6 +152,43 @@ class CommentReopener {
         dl.setEmailRecievers(email_recievers);
     }
 
+    public void main() {
+        def assignee_user = event.issue.getAssignee()
+        def groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
+        if ((!groups_initiator.size() || event.getUser().getName() == "callcenter") &&
+                event.issue.getProjectObject().getKey() != "SCR") {
+            if (event.issue.getStatusObject().getName() == "Open") {
+                log.debug "initiator: " + event.getUser().getName() +
+                        "; project: " + event.issue.getProjectObject().getKey() +
+                        "; already opened, break"
+                return
+            }
+            else {
+                def open_res = open_issue(event.issue)
+                if (!open_res) {
+                    throw new IllegalArgumentException ("Incorrect open transition res, issue (" + event.issue + ") " +
+                            event.issue.getKey() + " " + event.issue.getSummary() +
+                            " from transition " + event.issue.getStatusObject().getName())
+                }
+            }
+            Calendar c_day = new GregorianCalendar();
+            def res = to_unassigned(event.getUser(), event.issue.getAssignee(), c_day)
+            if (res) {
+                event.issue.setAssigneeId(null)
+            }
+            def str_log = get_ev_log_text(event, c_day, res, assignee_user)
+            write_comment_log(str_log)
+        } else {
+            log.debug "initiator: " + event.getUser().getName() +
+                    "; groups_size: " + groups_initiator.size() +
+                    "; project: " + event.issue.getProjectObject().getKey() + "; break"
+        }
+        def update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
+        try{
+            updateIssue(event.issue, update_user)
+        } catch (groovy.lang.MissingMethodException e) {}
+    }
+
     public void test_event() {
         TestingEvent test_ev = new TestingEvent();
         IssueManager issueManager = ComponentAccessor.getIssueManager()

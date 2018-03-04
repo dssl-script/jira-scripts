@@ -1,16 +1,20 @@
+import com.atlassian.jira.bc.issue.IssueService
 import com.atlassian.jira.component.ComponentAccessor;
 import com.atlassian.jira.event.type.EventDispatchOption;
-import com.atlassian.jira.issue.Issue;
+import com.atlassian.jira.issue.Issue
+import com.atlassian.jira.issue.IssueInputParametersImpl;
 import com.atlassian.jira.issue.IssueManager;
 import com.atlassian.jira.issue.MutableIssue
 import com.atlassian.jira.issue.UpdateIssueRequest;
 import com.atlassian.jira.issue.comments.CommentManager;
 import com.atlassian.jira.user.ApplicationUser;
 import com.atlassian.jira.issue.comments.Comment;
-import com.onresolve.scriptrunner.canned.jira.workflow.postfunctions.SendCustomEmail;
-
+import com.onresolve.scriptrunner.canned.jira.workflow.postfunctions.SendCustomEmail
+import com.opensymphony.workflow.loader.ActionDescriptor
+import com.opensymphony.workflow.loader.StepDescriptor;
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
+import com.atlassian.jira.workflow.JiraWorkflow;
 
 class DebugIssueLogger {
     CommentManager commentMgr = ComponentAccessor.getCommentManager()
@@ -88,6 +92,62 @@ class IssueUpdater {
 }
 
 
+class WorkflowAssistant {
+    private static int get_action_id_by_issue(MutableIssue issue, String action_name) {
+        JiraWorkflow workflow = ComponentAccessor.getWorkflowManager().getWorkflow(issue)
+
+        StepDescriptor oStep = workflow.getLinkedStep(issue.getStatusObject());
+        List<ActionDescriptor> oActions = oStep.getActions()
+        for(ActionDescriptor oAction : oActions)
+        {
+            if (oAction.getName() == action_name) return oAction.getId()
+        }
+        throw new IllegalArgumentException ("Issue action search error (" + issue + ") " +
+                ": action " + action_name + " not found in available actions list: " + oActions);
+    }
+
+    private static boolean transit_issue(issue, action_id) {
+        IssueService issueService = ComponentAccessor.getIssueService()
+        ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
+        IssueService.TransitionValidationResult transitionValidationResult = issueService.
+                            validateTransition(issue.getAssignee(), issue.id, action_id, new IssueInputParametersImpl())
+        if (transitionValidationResult.isValid()) {
+            IssueService.IssueResult transitionResult = issueService.transition(issue.getAssignee(), transitionValidationResult)
+            if (transitionResult.isValid()) {
+                return true
+            } else {
+                throw new IllegalArgumentException ("Issue transition error (" + issue + ") " +
+                        " from " + issue.getStatusObject().getName() + ": " + transitionResult.getErrorCollection());
+            }
+        } else {
+            throw new IllegalArgumentException ("Issue transitionValidation error (" + issue + ") " +
+                    " from " + issue.getStatusObject().getName() + ": " + transitionValidationResult.getErrorCollection());
+        }
+    }
+
+    public static boolean do_action(MutableIssue issue, String action_name) {
+        int action_id = get_action_id_by_issue(issue, action_name);
+        boolean  res = transit_issue(issue, action_id)
+        return res;
+    }
+}
+
+class UtilsTest {
+    IssueManager issueManager = ComponentAccessor.getIssueManager()
+    Issue debug_issue = issueManager.getIssueObject("SM-77")
+    //Issue debug_issue = issueManager.getIssueObject("SCR-1531")
+    ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
+    DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
+
+    def run_test() {
+        WorkflowAssistant.do_action(debug_issue, "Открыть");
+    }
+}
+
+UtilsTest ut = new UtilsTest();
+ut.run_test();
+
+/*
 issueManager = ComponentAccessor.getIssueManager()
 Issue debug_issue = issueManager.getIssueObject("SCR-1531")
 ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
@@ -98,4 +158,4 @@ def email_recievers = [
 ]
 DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 dl.setEmailRecievers(email_recievers);
-
+*/
