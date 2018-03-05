@@ -117,7 +117,7 @@ class UnassignLogic {
         }
     }
 
-    static boolean to_unassigned(user_assigned, c_day) {
+    static boolean to_unassigned(ApplicationUser user_assigned, Calendar c_day) {
         def groups_assigned = ComponentAccessor.getGroupManager().getGroupsForUser(user_assigned)
             if (is_no_work(c_day)) {
                 return true
@@ -143,6 +143,8 @@ class CommentReopener {
     IssueManager issueManager = ComponentAccessor.getIssueManager();
     Issue debug_issue = issueManager.getIssueObject("SCR-1531")
     ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
+    String log_text;
+
     def email_recievers = [
             "v.monakhov@dssl.ru"
             //"v.agafonov@dssl.ru",
@@ -154,26 +156,44 @@ class CommentReopener {
         dl.setEmailRecievers(email_recievers);
     }
 
+    public void write_log(String text) {
+        log_text += text;
+    }
+
     public void main(event, Calendar c_day) {
+        log_text = "";
+
         ArrayList<Group> groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
+        write_log("\nTime: " + c_day + "\n");
+        write_log("Initiator: " + event.getUser() + "\n")
+        write_log("Initiator groups: " + groups_initiator + "\n")
+        write_log("Assignee user: " + event.issue.getAssigneeUser() + "\n")
+
         if (!groups_initiator.size() || event.getUser().getName() == "callcenter") {
             ApplicationUser update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
             if (event.issue.getStatusObject().getName() == "Open") {
-                dl.debug "already opened";
+                write_log("Issue already opened\n")
             } else {
-                WorkflowAssistant.do_action(event.issue, "Открыть", update_user);
+                WorkflowAssistant.do_action(event.issue, "Открыть")//, update_user);
+                write_log("Issue translated to Open\n")
             }
             boolean res;
             if (event.issue.getAssigneeUser()) {
-                res = UnassignLogic.to_unassigned(event.issue.getAssigneeUser(), c_day);
+                res = true;
+                //res = UnassignLogic.to_unassigned(event.issue.getAssigneeUser(), c_day);
             } else {
                 res = false
             }
+            write_log("To unassign: " + res + "\n")
             if (res) {
                 event.issue.setAssigneeId(null);
                 IssueUpdater.updateIssue(event.issue, update_user)
             }
+            dl.write_comment_log(log_text);
+        } else {
+            write_log("Initiator groups is not empty and initiator is not callcenter\n");
         }
+        dl.debug log_text;
     }
 
     def get_day_string(int_val) {
@@ -199,7 +219,7 @@ class CommentReopener {
 
         Calendar c_day = new GregorianCalendar(2018,3,7,14,15,0)
         //c_day.set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY);
-        dl.debug(c_day)
+        dl.debug(get_day_string(c_day.get(Calendar.DAY_OF_WEEK)))
         //c_day.setWeekDate(2018, 10, 5);
 
         main(test_ev, c_day)
@@ -211,7 +231,16 @@ class CommentReopener {
 }
 
 
-
+Calendar c_day = new GregorianCalendar();
 CommentReopener script = new CommentReopener();
-script.test_event();
 
+try {
+    script.test_event();
+    //script.main(event, c_day);
+} catch (Exception e) {
+    def script_name = "comment_reopen " + this.class.getName()
+    def ex_string = "ERROR in script " + script_name + ": " +  e +
+            "; issue: " + event.issue
+    dl.send_error_email("<font color=\"red\">" + ex_string + "</font>")
+    dl.write_comment_log("{color:#FF0000}" + ex_string + "{color}")
+}
