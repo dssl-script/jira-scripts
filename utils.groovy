@@ -11,7 +11,7 @@ import com.atlassian.jira.user.ApplicationUser;
 import com.atlassian.jira.issue.comments.Comment;
 import com.onresolve.scriptrunner.canned.jira.workflow.postfunctions.SendCustomEmail
 import com.opensymphony.workflow.loader.ActionDescriptor
-import com.opensymphony.workflow.loader.StepDescriptor;
+import com.opensymphony.workflow.loader.StepDescriptor
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 import com.atlassian.jira.workflow.JiraWorkflow;
@@ -25,7 +25,11 @@ class DebugIssueLogger {
 
     Logger log = Logger.getLogger("com.acme.CreateSubtask");
 
-    DebugIssueLogger(issue, user) {
+    DebugIssueLogger() {
+        log.setLevel(Level.DEBUG);
+    }
+
+    DebugIssueLogger(Issue issue, ApplicationUser user) {
         debug_issue = issue;
         debug_user = user;
         log.setLevel(Level.DEBUG);
@@ -106,13 +110,13 @@ class WorkflowAssistant {
                 ": action " + action_name + " not found in available actions list: " + oActions);
     }
 
-    private static boolean transit_issue(issue, action_id) {
+    private static boolean transit_issue(issue, action_id, action_user) {
         IssueService issueService = ComponentAccessor.getIssueService()
         ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
         IssueService.TransitionValidationResult transitionValidationResult = issueService.
-                            validateTransition(issue.getAssignee(), issue.id, action_id, new IssueInputParametersImpl())
+                            validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
         if (transitionValidationResult.isValid()) {
-            IssueService.IssueResult transitionResult = issueService.transition(issue.getAssignee(), transitionValidationResult)
+            IssueService.IssueResult transitionResult = issueService.transition(action_user, transitionValidationResult)
             if (transitionResult.isValid()) {
                 return true
             } else {
@@ -125,9 +129,9 @@ class WorkflowAssistant {
         }
     }
 
-    public static boolean do_action(MutableIssue issue, String action_name) {
+    public static boolean do_action(MutableIssue issue, String action_name, ApplicationUser action_user) {
         int action_id = get_action_id_by_issue(issue, action_name);
-        boolean  res = transit_issue(issue, action_id)
+        boolean  res = transit_issue(issue, action_id, action_user)
         return res;
     }
 }
@@ -140,7 +144,7 @@ class UtilsTest {
     DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 
     def run_test() {
-        WorkflowAssistant.do_action(debug_issue, "Открыть");
+        WorkflowAssistant.do_action(debug_issue, "Открыть", debug_user);
     }
 }
 

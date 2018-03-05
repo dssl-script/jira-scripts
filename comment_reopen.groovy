@@ -137,6 +137,8 @@ class TestingEvent {
     }
 }
 
+
+
 class CommentReopener {
     IssueManager issueManager = ComponentAccessor.getIssueManager();
     Issue debug_issue = issueManager.getIssueObject("SCR-1531")
@@ -152,56 +154,63 @@ class CommentReopener {
         dl.setEmailRecievers(email_recievers);
     }
 
-    public void main() {
-        def assignee_user = event.issue.getAssignee()
-        def groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
-        if ((!groups_initiator.size() || event.getUser().getName() == "callcenter") &&
-                event.issue.getProjectObject().getKey() != "SCR") {
+    public void main(event, Calendar c_day) {
+        ArrayList<Group> groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
+        if (!groups_initiator.size() || event.getUser().getName() == "callcenter") {
+            ApplicationUser update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
             if (event.issue.getStatusObject().getName() == "Open") {
-                log.debug "initiator: " + event.getUser().getName() +
-                        "; project: " + event.issue.getProjectObject().getKey() +
-                        "; already opened, break"
-                return
+                dl.debug "already opened";
+            } else {
+                WorkflowAssistant.do_action(event.issue, "Открыть", update_user);
             }
-            else {
-                def open_res = open_issue(event.issue)
-                if (!open_res) {
-                    throw new IllegalArgumentException ("Incorrect open transition res, issue (" + event.issue + ") " +
-                            event.issue.getKey() + " " + event.issue.getSummary() +
-                            " from transition " + event.issue.getStatusObject().getName())
-                }
+            boolean res;
+            if (event.issue.getAssigneeUser()) {
+                res = UnassignLogic.to_unassigned(event.issue.getAssigneeUser(), c_day);
+            } else {
+                res = false
             }
-            Calendar c_day = new GregorianCalendar();
-            def res = to_unassigned(event.getUser(), event.issue.getAssignee(), c_day)
             if (res) {
-                event.issue.setAssigneeId(null)
+                event.issue.setAssigneeId(null);
+                IssueUpdater.updateIssue(event.issue, update_user)
             }
-            def str_log = get_ev_log_text(event, c_day, res, assignee_user)
-            write_comment_log(str_log)
-        } else {
-            log.debug "initiator: " + event.getUser().getName() +
-                    "; groups_size: " + groups_initiator.size() +
-                    "; project: " + event.issue.getProjectObject().getKey() + "; break"
         }
-        def update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
-        try{
-            updateIssue(event.issue, update_user)
-        } catch (groovy.lang.MissingMethodException e) {}
+    }
+
+    def get_day_string(int_val) {
+        Map< Integer, String > map = new HashMap< Integer, String >();
+        map.put(1,"SUNDAY");
+        map.put(2,"MONDAY");
+        map.put(3,"TUESDAY");
+        map.put(4,"WEDNESDAY");
+        map.put(5,"THURSDAY");
+        map.put(6,"FRIDAY");
+        map.put(7,"SATURDAY");
+        return map.get(int_val);
     }
 
     public void test_event() {
         TestingEvent test_ev = new TestingEvent();
         IssueManager issueManager = ComponentAccessor.getIssueManager()
         Issue test_issue = issueManager.getIssueObject("SM-77")
-        Calendar c_day = new GregorianCalendar();
+        //Issue test_issue = issueManager.getIssueObject("SCR-1531")
+        //Issue test_issue = issueManager.getIssueObject("SCR-1529")
         test_ev.issue = test_issue;
         test_ev.initiator = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
 
-        UnassignLogic.to_unassigned(test_ev.issue.getAssigneeUser(), c_day);
-        dl.debug "test"
+        Calendar c_day = new GregorianCalendar(2018,3,7,14,15,0)
+        //c_day.set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY);
+        dl.debug(c_day)
+        //c_day.setWeekDate(2018, 10, 5);
+
+        main(test_ev, c_day)
+        //UnassignLogic.to_unassigned(test_ev.issue.getAssigneeUser(), c_day);
+
+
     }
 
 }
+
+
 
 CommentReopener script = new CommentReopener();
 script.test_event();
