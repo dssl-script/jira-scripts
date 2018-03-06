@@ -28,7 +28,8 @@ import com.atlassian.jira.issue.Issue
 import com.atlassian.jira.issue.IssueManager
 import com.atlassian.jira.user.ApplicationUser
 
-
+import org.apache.log4j.Logger
+import org.apache.log4j.Level
 log = Logger.getLogger("com.acme.CreateSubtask")
 log.setLevel(Level.DEBUG)
 issueManager = ComponentAccessor.getIssueManager()

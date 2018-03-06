@@ -45,6 +45,75 @@ import com.onresolve.scriptrunner.canned.jira.workflow.postfunctions.SendCustomE
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 
+import com.atlassian.jira.workflow.JiraWorkflow;
+
+class DebugIssueLoggerCostyl {
+    CommentManager commentMgr = ComponentAccessor.getCommentManager()
+    Issue debug_issue;
+    ApplicationUser debug_user;
+    int max_comments = 200;
+    String[] email_recievers;
+
+    Logger log = Logger.getLogger("com.acme.CreateSubtask");
+
+    DebugIssueLoggerCostyl() {
+        log.setLevel(Level.DEBUG);
+    }
+
+    DebugIssueLoggerCostyl(Issue issue, ApplicationUser user) {
+        debug_issue = issue;
+        debug_user = user;
+        log.setLevel(Level.DEBUG);
+    }
+
+    private void clear_old_comments(List<Comment> comments) {
+        int num_to_delete = comments.size() - (max_comments-1);
+        for (int i=0; i<num_to_delete; i++) {
+            commentMgr.delete(comments[i])
+        }
+    }
+
+    public void debug(text) {
+        log.debug(text);
+    }
+
+    public void setEmailRecievers(recievers) {
+        email_recievers = recievers;
+    }
+
+    public void write_comment_log(text) {
+        List<Comment> comments = commentMgr.getComments(debug_issue);
+        clear_old_comments(comments)
+        commentMgr.create(debug_issue, debug_user, text, false)
+    }
+
+    public void write_to_body_log(text) {
+        debug_issue.setDescription(text)
+        IssueUpdater.updateIssue(debug_issue, debug_user)
+    }
+
+    public void send_error_email(text) {
+        String subject = debug_issue.getKey() + " " + debug_issue.getSummary();
+        def params = [
+                "issue"                                       : debug_issue,
+                (SendCustomEmail.FIELD_EMAIL_TEMPLATE)        : "<font color=\"red\">" + text + "</font>",
+                (SendCustomEmail.FIELD_EMAIL_SUBJECT_TEMPLATE): subject,
+                (SendCustomEmail.FIELD_TO_ADDRESSES)          : String.join(",", email_recievers),
+                (SendCustomEmail.FIELD_EMAIL_FORMAT)          : "HTML"
+        ]
+        SendCustomEmail sendCustomEmail = new SendCustomEmail();
+        if (!sendCustomEmail.doValidate(params, false).hasAnyErrors()) {
+            sendCustomEmail.doScript(params);
+        } else {
+            err_string = "{color:#FF0000}SEND MAIL ERROR: " + sendCustomEmail.doValidate(params, false).errors + "{color}"
+            write_comment_log(err_string)
+        }
+
+    }
+}
+
+
+
 class UnassignLogic {
 
     static boolean is_holiday(c_day) {
@@ -146,11 +215,11 @@ class CommentReopener {
     String log_text;
 
     def email_recievers = [
-            "v.monakhov@dssl.ru"
-            //"v.agafonov@dssl.ru",
-            //"p.shwarts@dssl.ru"
+            "v.monakhov@dssl.ru",
+            "v.agafonov@dssl.ru",
+            "p.shwarts@dssl.ru"
     ]
-    DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
+    DebugIssueLoggerCostyl dl = new DebugIssueLoggerCostyl(debug_issue, debug_user);
 
     CommentReopener() {
         dl.setEmailRecievers(email_recievers);
@@ -161,37 +230,42 @@ class CommentReopener {
     }
 
     public void main(event, Calendar c_day) {
+        DateFormat dateFormatTest = new SimpleDateFormat("dd.MM.yyyy HH:mm:SS");
         log_text = "";
 
-        ArrayList<Group> groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
-        write_log("\nTime: " + c_day + "\n");
+        //ArrayList<Group> groups_initiator = ComponentAccessor.getGroupManager().getGroupsForUser(event.getUser())
+        write_log("\nTime: " + get_day_string(c_day.get(Calendar.DAY_OF_WEEK)) +
+                  " " + dateFormatTest.format(c_day.getTime()) + "\n");
+        write_log("Issue: " + event.issue + "\n")
         write_log("Initiator: " + event.getUser() + "\n")
-        write_log("Initiator groups: " + groups_initiator + "\n")
+        //write_log("Initiator groups: " + groups_initiator + "\n")
         write_log("Assignee user: " + event.issue.getAssigneeUser() + "\n")
 
-        if (!groups_initiator.size() || event.getUser().getName() == "callcenter") {
+        //if (!groups_initiator.size() || event.getUser().getName() == "callcenter") {
+        if (event.getUser() != event.issue.getAssigneeUser()) {
             ApplicationUser update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
             if (event.issue.getStatusObject().getName() == "Open") {
                 write_log("Issue already opened\n")
             } else {
-                WorkflowAssistant.do_action(event.issue, "Открыть")//, update_user);
+                WorkflowAssistant.do_action(event.issue, "Открыть", update_user);
                 write_log("Issue translated to Open\n")
             }
             boolean res;
-            if (event.issue.getAssigneeUser()) {
-                res = true;
-                //res = UnassignLogic.to_unassigned(event.issue.getAssigneeUser(), c_day);
+            if (event.issue.getAssigneeUser() && event.issue.getProjectObject().getKey() != "SCR") {
+                res = UnassignLogic.to_unassigned(event.issue.getAssigneeUser(), c_day);
+                write_log("To unassign: " + res + "\n")
             } else {
                 res = false
+                write_log("To unassign: " + res + ", assignee is null or SCR\n")
             }
-            write_log("To unassign: " + res + "\n")
+
             if (res) {
                 event.issue.setAssigneeId(null);
                 IssueUpdater.updateIssue(event.issue, update_user)
             }
             dl.write_comment_log(log_text);
         } else {
-            write_log("Initiator groups is not empty and initiator is not callcenter\n");
+            write_log("Initiator equal to assignee, break\n");
         }
         dl.debug log_text;
     }
@@ -215,14 +289,21 @@ class CommentReopener {
         //Issue test_issue = issueManager.getIssueObject("SCR-1531")
         //Issue test_issue = issueManager.getIssueObject("SCR-1529")
         test_ev.issue = test_issue;
-        test_ev.initiator = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
-
-        Calendar c_day = new GregorianCalendar(2018,3,7,14,15,0)
-        //c_day.set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY);
-        dl.debug(get_day_string(c_day.get(Calendar.DAY_OF_WEEK)))
-        //c_day.setWeekDate(2018, 10, 5);
-
+        //test_ev.initiator = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
+        test_ev.initiator = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
+        Calendar c_day = new GregorianCalendar(2018,3,18,20,15,0)
         main(test_ev, c_day)
+        Calendar c_day1 = new GregorianCalendar(2018,3,19,20,15,0)
+        main(test_ev, c_day1)
+        Calendar c_day2 = new GregorianCalendar(2018,3,20,20,15,0)
+        main(test_ev, c_day2)
+        Calendar c_day3 = new GregorianCalendar(2018,3,21,20,15,0)
+        main(test_ev, c_day3)
+        Calendar c_day4 = new GregorianCalendar(2018,3,22,20,15,0)
+        main(test_ev, c_day4)
+        //c_day.set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY);
+
+        //c_day.setWeekDate(2018, 10, 5);
         //UnassignLogic.to_unassigned(test_ev.issue.getAssigneeUser(), c_day);
 
 
@@ -235,12 +316,12 @@ Calendar c_day = new GregorianCalendar();
 CommentReopener script = new CommentReopener();
 
 try {
-    script.test_event();
-    //script.main(event, c_day);
+    //script.test_event();
+    script.main(event, c_day);
 } catch (Exception e) {
-    def script_name = "comment_reopen " + this.class.getName()
+    def script_name = "update_reopen " + this.class.getName()
     def ex_string = "ERROR in script " + script_name + ": " +  e +
             "; issue: " + event.issue
-    dl.send_error_email("<font color=\"red\">" + ex_string + "</font>")
-    dl.write_comment_log("{color:#FF0000}" + ex_string + "{color}")
+    script.dl.send_error_email(ex_string)
+    script.dl.write_comment_log("{color:#FF0000}" + ex_string + "{color}")
 }

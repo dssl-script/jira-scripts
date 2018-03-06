@@ -20,7 +20,7 @@ class DebugIssueLogger {
     CommentManager commentMgr = ComponentAccessor.getCommentManager()
     Issue debug_issue;
     ApplicationUser debug_user;
-    int max_comments = 2;
+    int max_comments = 200;
     String[] email_recievers;
 
     Logger log = Logger.getLogger("com.acme.CreateSubtask");
