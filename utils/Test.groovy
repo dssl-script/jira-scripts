@@ -112,8 +112,9 @@ class WorkflowAssistant {
 
     private static boolean transit_issue(issue, action_id, action_user) {
         IssueService issueService = ComponentAccessor.getIssueService()
+        ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
         IssueService.TransitionValidationResult transitionValidationResult = issueService.
-                            validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
+                validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
         if (transitionValidationResult.isValid()) {
             IssueService.IssueResult transitionResult = issueService.transition(action_user, transitionValidationResult)
             if (transitionResult.isValid()) {
@@ -135,21 +136,32 @@ class WorkflowAssistant {
     }
 }
 
-class UtilsTest {
+class Testss {
     IssueManager issueManager = ComponentAccessor.getIssueManager()
     Issue debug_issue = issueManager.getIssueObject("SM-77")
     //Issue debug_issue = issueManager.getIssueObject("SCR-1531")
     ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
     DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 
-    def run_test() {
-        dl.debug("TEST")
+    def run_test(event) {
+        //dl.debug("TEST")
+        //def changeItems = ComponentAccessor.changeHistoryManager.getChangeHistories(debug_issue)
+        //dl.debug(changeItems[0].properties)
+        def log = event.getChangeLog()
+        dl.debug(log)
+        /*
+        for (int i = changeItems.size()-10; i < changeItems.size(); i++) {
+            dl.debug(changeItems[i].getComment());
+        }*/
+
+
+        //dl.debug(changeItems)
         //WorkflowAssistant.do_action(debug_issue, "Открыть", debug_user);
     }
 }
 
-UtilsTest ut = new UtilsTest();
-ut.run_test();
+Testss ut = new Testss();
+ut.run_test(event);
 
 /*
 issueManager = ComponentAccessor.getIssueManager()

@@ -1,8 +1,6 @@
-import com.atlassian.jira.bc.issue.IssueService
 import com.atlassian.jira.component.ComponentAccessor;
 import com.atlassian.jira.event.type.EventDispatchOption;
 import com.atlassian.jira.issue.Issue
-import com.atlassian.jira.issue.IssueInputParametersImpl;
 import com.atlassian.jira.issue.IssueManager;
 import com.atlassian.jira.issue.MutableIssue
 import com.atlassian.jira.issue.UpdateIssueRequest;
@@ -10,11 +8,8 @@ import com.atlassian.jira.issue.comments.CommentManager;
 import com.atlassian.jira.user.ApplicationUser;
 import com.atlassian.jira.issue.comments.Comment;
 import com.onresolve.scriptrunner.canned.jira.workflow.postfunctions.SendCustomEmail
-import com.opensymphony.workflow.loader.ActionDescriptor
-import com.opensymphony.workflow.loader.StepDescriptor
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
-import com.atlassian.jira.workflow.JiraWorkflow;
 
 class DebugIssueLogger {
     CommentManager commentMgr = ComponentAccessor.getCommentManager()
@@ -95,71 +90,81 @@ class IssueUpdater {
     }
 }
 
+class TestingEvent {
+    Issue issue;
+    ApplicationUser initiator;
 
-class WorkflowAssistant {
-    private static int get_action_id_by_issue(MutableIssue issue, String action_name) {
-        JiraWorkflow workflow = ComponentAccessor.getWorkflowManager().getWorkflow(issue)
-
-        StepDescriptor oStep = workflow.getLinkedStep(issue.getStatusObject());
-        List<ActionDescriptor> oActions = oStep.getActions()
-        for(ActionDescriptor oAction : oActions)
-        {
-            if (oAction.getName() == action_name) return oAction.getId()
-        }
-        throw new IllegalArgumentException ("Issue action search error (" + issue + ") " +
-                ": action " + action_name + " not found in available actions list: " + oActions);
-    }
-
-    private static boolean transit_issue(issue, action_id, action_user) {
-        IssueService issueService = ComponentAccessor.getIssueService()
-        IssueService.TransitionValidationResult transitionValidationResult = issueService.
-                            validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
-        if (transitionValidationResult.isValid()) {
-            IssueService.IssueResult transitionResult = issueService.transition(action_user, transitionValidationResult)
-            if (transitionResult.isValid()) {
-                return true
-            } else {
-                throw new IllegalArgumentException ("Issue transition error (" + issue + ") " +
-                        " from " + issue.getStatusObject().getName() + ": " + transitionResult.getErrorCollection());
-            }
-        } else {
-            throw new IllegalArgumentException ("Issue transitionValidation error (" + issue + ") " +
-                    " from " + issue.getStatusObject().getName() + ": " + transitionValidationResult.getErrorCollection());
-        }
-    }
-
-    public static boolean do_action(MutableIssue issue, String action_name, ApplicationUser action_user) {
-        int action_id = get_action_id_by_issue(issue, action_name);
-        boolean  res = transit_issue(issue, action_id, action_user)
-        return res;
+    ApplicationUser getUser() {
+        return initiator;
     }
 }
 
-class UtilsTest {
+class ResolutionSender {
     IssueManager issueManager = ComponentAccessor.getIssueManager()
-    Issue debug_issue = issueManager.getIssueObject("SM-77")
-    //Issue debug_issue = issueManager.getIssueObject("SCR-1531")
-    ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
+    Issue debug_issue = issueManager.getIssueObject("SCR-1604");
+    ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov");
     DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 
+    def ResolutionSender() {
+        def email_recievers = [
+                "v.monakhov@dssl.ru",
+                //"v.agafonov@dssl.ru",
+                //"p.shwarts@dssl.ru"
+        ]
+        dl.setEmailRecievers(email_recievers);
+    }
+
+    String get_text(sended_to) {
+        String text = "Ваша заявка передана в " + sended_to + ".\n";
+        text += "Ожидайте обратной связи."
+        return text
+    }
+
+    void leave_comment(issue, user, sended_to) {
+        CommentManager commentMgr = ComponentAccessor.getCommentManager()
+        commentMgr.create(issue, user, get_text(sended_to), true)
+    }
+
+    void run(issue) {
+        def dbg_string = "Send comment to client started\n";
+        dbg_string += "Issue: " + issue + "\n";
+        if (issue.getResolution().getName() == "Передано в сервисный центр") {
+            dl.debug("to service")
+            dbg_string += "to service, leaving comment"
+            leave_comment(issue, issue.getAssignee(), "сервисный центр")
+        }
+        else if (issue.getResolution().getName() == "Передано в коммерческий отдел") {
+            leave_comment(issue, issue.getAssignee(), "коммерческий отдел")
+            dl.debug("to commerce")
+            dbg_string += "to commerce, leaving comment"
+        } else {
+            dl.debug("resolution is " + issue.getResolution().getName() + "; break")
+            return;
+        }
+        dl.write_comment_log(dbg_string);
+    }
+
+
     def run_test() {
-        dl.debug("TEST")
-        //WorkflowAssistant.do_action(debug_issue, "Открыть", debug_user);
+        TestingEvent event = new TestingEvent();
+
+        event.issue = issueManager.getIssueObject("SM-77");
+        event.initiator = debug_user;
+        run(event.issue)
     }
 }
 
-UtilsTest ut = new UtilsTest();
-ut.run_test();
+ResolutionSender script = new ResolutionSender();
 
-/*
-issueManager = ComponentAccessor.getIssueManager()
-Issue debug_issue = issueManager.getIssueObject("SCR-1531")
-ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("v.monakhov")
-def email_recievers = [
-        "v.monakhov@dssl.ru"
-        //"v.agafonov@dssl.ru",
-        //"p.shwarts@dssl.ru"
-]
-DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
-dl.setEmailRecievers(email_recievers);
-*/
+
+
+try {
+    //script.run_test()
+    script.run(issue);
+} catch (Exception e) {
+    def script_name = "to_commerce_service_mail " + this.class.getName()
+    def ex_string = "ERROR in script " + script_name + ": " +  e +
+            "; issue: " + issue
+    script.dl.send_error_email(ex_string)
+    script.dl.write_comment_log("{color:#FF0000}" + ex_string + "{color}")
+}

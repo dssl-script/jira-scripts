@@ -112,8 +112,9 @@ class WorkflowAssistant {
 
     private static boolean transit_issue(issue, action_id, action_user) {
         IssueService issueService = ComponentAccessor.getIssueService()
+        ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
         IssueService.TransitionValidationResult transitionValidationResult = issueService.
-                            validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
+                validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
         if (transitionValidationResult.isValid()) {
             IssueService.IssueResult transitionResult = issueService.transition(action_user, transitionValidationResult)
             if (transitionResult.isValid()) {
@@ -143,8 +144,8 @@ class UtilsTest {
     DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 
     def run_test() {
-        dl.debug("TEST")
-        //WorkflowAssistant.do_action(debug_issue, "Открыть", debug_user);
+        def page = new URL("http://script.dssl.ru/login.jsp").getText()
+        dl.debug(page)
     }
 }
 
@@ -163,3 +164,6 @@ def email_recievers = [
 DebugIssueLogger dl = new DebugIssueLogger(debug_issue, debug_user);
 dl.setEmailRecievers(email_recievers);
 */
+
+
+

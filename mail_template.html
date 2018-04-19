@@ -1,0 +1,62 @@
+<style>
+td {
+	padding: 10px 0 10px 0; 
+}
+
+.tableUnitRight {
+    padding-left: 20px;
+    max-width: 800px;
+}
+
+.tableUnitLeft {
+	text-align: right;
+}
+
+.tableRow {
+    border-bottom: 1px solid grey;
+    vertical-align: top;
+}
+</style>
+
+<h3>$allComments.getLastComment($issue).getAuthorFullName() - $allComments.getLastComment($issue).getUpdated() </h3>
+<div><font size="3">$allComments.getLastComment($issue).getBody()</font></div>
+<br><br>
+<table>
+    <tr class="tableRow">
+        <td class="tableUnitLeft">Issue key:</td>
+        <td class="tableUnitRight"><a href="http://support.trassir.com/browse/$issue.getKey()">$issue.getKey()</a></td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Description:</td>
+    	<td class="tableUnitRight">$issue.getDescription()</td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Devices:</td>
+    	<td class="tableUnitRight">$customFieldManager.getCustomFieldObject('customfield_10808').getValue($issue)</td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Contacts:</td>
+    	<td class="tableUnitRight">$customFieldManager.getCustomFieldObject('customfield_10803').getValue($issue)</td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Author:</td>
+    	<td class="tableUnitRight">$issue.getReporter().getName()</td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Author mail:</td>
+    	<td class="tableUnitRight">$issue.getReporter().getEmailAddress()</td>
+    </tr>
+    <tr class="tableRow">
+    	<td class="tableUnitLeft">Assignee:</td>
+    	<td class="tableUnitRight">$issue.getAssignee().getName()</td>
+    </tr>
+</table>
+<br>
+<br>
+<h3>Comment history:</h3>
+<br>
+#foreach ($comment in $allComments.getComments($issue))
+    <u>$comment.getAuthorFullName() - $comment.getUpdated()</u><br>
+    $comment.getBody()<br>
+    <br>
+#end

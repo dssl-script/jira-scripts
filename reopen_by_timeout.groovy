@@ -72,7 +72,7 @@ def createIssueUpdateRequest() {
             .build()
 }
 
-jql_string_to_open = 'project not in (Script) AND status not in (Closed, "In Progress",Open,Resolved) AND "Next Step Date"  < 10m'
+jql_string_to_open = 'project not in (Script, JST) AND status not in (Closed, "In Progress",Open,Resolved) AND "Next Step Date"  < 10m'
 
 change_issues(jql_string_to_open, 51)
 //get_custom_field()

@@ -47,6 +47,129 @@ import org.apache.log4j.Level
 
 import com.atlassian.jira.workflow.JiraWorkflow;
 
+
+class DebugIssueLogger {
+    CommentManager commentMgr = ComponentAccessor.getCommentManager()
+    Issue debug_issue;
+    ApplicationUser debug_user;
+    int max_comments = 200;
+    String[] email_recievers;
+
+    Logger log = Logger.getLogger("com.acme.CreateSubtask");
+
+    DebugIssueLogger() {
+        log.setLevel(Level.DEBUG);
+    }
+
+    DebugIssueLogger(Issue issue, ApplicationUser user) {
+        debug_issue = issue;
+        debug_user = user;
+        log.setLevel(Level.DEBUG);
+    }
+
+    private void clear_old_comments(List<Comment> comments) {
+        int num_to_delete = comments.size() - (max_comments-1);
+        for (int i=0; i<num_to_delete; i++) {
+            commentMgr.delete(comments[i])
+        }
+    }
+
+    public void debug(text) {
+        log.debug(text);
+    }
+
+    public void setEmailRecievers(recievers) {
+        email_recievers = recievers;
+    }
+
+    public void write_comment_log(text) {
+        List<Comment> comments = commentMgr.getComments(debug_issue);
+        clear_old_comments(comments)
+        commentMgr.create(debug_issue, debug_user, text, false)
+    }
+
+    public void write_to_body_log(text) {
+        debug_issue.setDescription(text)
+        IssueUpdater.updateIssue(debug_issue, debug_user)
+    }
+
+    public void send_error_email(text) {
+        String subject = debug_issue.getKey() + " " + debug_issue.getSummary();
+        def params = [
+                "issue"                                       : debug_issue,
+                (SendCustomEmail.FIELD_EMAIL_TEMPLATE)        : "<font color=\"red\">" + text + "</font>",
+                (SendCustomEmail.FIELD_EMAIL_SUBJECT_TEMPLATE): subject,
+                (SendCustomEmail.FIELD_TO_ADDRESSES)          : String.join(",", email_recievers),
+                (SendCustomEmail.FIELD_EMAIL_FORMAT)          : "HTML"
+        ]
+        SendCustomEmail sendCustomEmail = new SendCustomEmail();
+        if (!sendCustomEmail.doValidate(params, false).hasAnyErrors()) {
+            sendCustomEmail.doScript(params);
+        } else {
+            err_string = "{color:#FF0000}SEND MAIL ERROR: " + sendCustomEmail.doValidate(params, false).errors + "{color}"
+            write_comment_log(err_string)
+        }
+
+    }
+}
+
+class IssueUpdater {
+
+    static void updateIssue(MutableIssue issue, user) {
+        IssueManager issueManager = ComponentAccessor.getIssueManager()
+        issueManager.updateIssue(user, issue, IssueUpdater.createIssueUpdateRequest())
+    }
+
+    static UpdateIssueRequest createIssueUpdateRequest() {
+        new UpdateIssueRequest.UpdateIssueRequestBuilder()
+                .eventDispatchOption(EventDispatchOption.DO_NOT_DISPATCH)
+                .sendMail(false)
+                .build()
+    }
+}
+
+
+class WorkflowAssistant {
+    private static int get_action_id_by_issue(MutableIssue issue, String action_name) {
+        JiraWorkflow workflow = ComponentAccessor.getWorkflowManager().getWorkflow(issue)
+
+        StepDescriptor oStep = workflow.getLinkedStep(issue.getStatusObject());
+        List<ActionDescriptor> oActions = oStep.getActions()
+        for(ActionDescriptor oAction : oActions)
+        {
+            if (oAction.getName() == action_name) return oAction.getId()
+        }
+        throw new IllegalArgumentException ("Issue action search error (" + issue + ") " +
+                ": action " + action_name + " not found in available actions list: " + oActions);
+    }
+
+    private static boolean transit_issue(issue, action_id, action_user) {
+        IssueService issueService = ComponentAccessor.getIssueService()
+        ApplicationUser debug_user = ComponentAccessor.getUserManager().getUserByName("0037@okskoe.com")
+        IssueService.TransitionValidationResult transitionValidationResult = issueService.
+                validateTransition(action_user, issue.id, action_id, new IssueInputParametersImpl())
+        if (transitionValidationResult.isValid()) {
+            IssueService.IssueResult transitionResult = issueService.transition(action_user, transitionValidationResult)
+            if (transitionResult.isValid()) {
+                return true
+            } else {
+                throw new IllegalArgumentException ("Issue transition error (" + issue + ") " +
+                        " from " + issue.getStatusObject().getName() + ": " + transitionResult.getErrorCollection());
+            }
+        } else {
+            throw new IllegalArgumentException ("Issue transitionValidation error (" + issue + ") " +
+                    " from " + issue.getStatusObject().getName() + ": " + transitionValidationResult.getErrorCollection());
+        }
+    }
+
+    public static boolean do_action(MutableIssue issue, String action_name, ApplicationUser action_user) {
+        int action_id = get_action_id_by_issue(issue, action_name);
+        boolean  res = transit_issue(issue, action_id, action_user)
+        return res;
+    }
+}
+
+
 class DebugIssueLoggerCostyl {
     CommentManager commentMgr = ComponentAccessor.getCommentManager()
     Issue debug_issue;
@@ -240,7 +363,11 @@ class CommentReopener {
         write_log("Initiator: " + event.getUser() + "\n")
         //write_log("Initiator groups: " + groups_initiator + "\n")
         write_log("Assignee user: " + event.issue.getAssigneeUser() + "\n")
-
+        if (event.issue.getProjectObject().getKey() == "TOEXPERT") {
+            write_log("Project TOEXPERT, break")
+            dl.debug log_text;
+            return
+        }
         //if (!groups_initiator.size() || event.getUser().getName() == "callcenter") {
         if (event.getUser() != event.issue.getAssigneeUser()) {
             ApplicationUser update_user = ComponentAccessor.getUserManager().getUserByName("v.agafonov")
@@ -322,6 +449,6 @@ try {
     def script_name = "update_reopen " + this.class.getName()
     def ex_string = "ERROR in script " + script_name + ": " +  e +
             "; issue: " + event.issue
-    script.dl.send_error_email(ex_string)
+    script.dl.send_error_email("<font color=\"red\">" + ex_string + "</font>")
     script.dl.write_comment_log("{color:#FF0000}" + ex_string + "{color}")
 }
